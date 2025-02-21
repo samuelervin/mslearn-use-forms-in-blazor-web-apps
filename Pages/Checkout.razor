@@ -2,47 +2,70 @@
 @inject OrderState OrderState
 @inject HttpClient HttpClient
 @inject NavigationManager NavigationManager
+@implements IDisposable
+
 
 <div class="main">
+<EditForm EditContext=editContext OnValidSubmit=PlaceOrder>        
     <div class="checkout-cols">
-        <div class="checkout-order-details">
-            <h4>Review order</h4>
-            @foreach (var pizza in Order.Pizzas)
-            {
-                <p>
-                    <strong>
-                        @(pizza.Size)"
-                        @pizza.Special.Name
-                        (£@pizza.GetFormattedTotalPrice())
-                    </strong>
-                </p>
-            }
+                <div class="checkout-order-details">
+                    <h4>Review order</h4>
+                    <OrderReview Order="Order" />
+                </div>
 
-            <p>
-                <strong>
-                    Total price:
-                    £@Order.GetFormattedTotalPrice()
-                </strong>
-            </p>
-        </div>
-    </div>
+                <div class="checkout-delivery-address">
+                    <h4>Deliver to...</h4>
+                        @if (isError)
+                        {
+                            <div class="alert alert-danger">
+                                Please enter a name and address.</div>
+                        }
+                    <AddressEditor Address="Order.DeliveryAddress" />
+                </div>
 
-    <button class="checkout-button btn btn-warning" @onclick="PlaceOrder" disabled=@isSubmitting>
-      Place order
-    </button>
-</div>
+                <button class="checkout-button btn btn-warning" type="Submit" disabled=@isError> Place Order</button>
+
+            </div>
+             <ValidationSummary />
+             <DataAnnotationsValidator />
+
+        </EditForm>
+
+</div>>
 
 @code {
     Order Order => OrderState.Order;
-    bool isSubmitting;
+    bool isError=true;
+
+    //the context for the editor form
+    private EditContext editContext;
+
+    protected override void OnInitialized()
+    {
+        //initalize the context
+        editContext = new(Order.DeliveryAddress);
+        editContext.OnFieldChanged += HandleFieldChanged;
+    }
+    //handles the form validation
+    private void HandleFieldChanged(object sender, FieldChangedEventArgs e)
+    {
+        //if there are no form input errors then allow the button to be enabled for submit
+        isError = !editContext.Validate();
+        StateHasChanged();
+    }
+
 
     async Task PlaceOrder()
     {
-        isSubmitting = true;
         var response = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "orders", OrderState.Order);
         var newOrderId= await response.Content.ReadFromJsonAsync<int>();
         OrderState.ResetOrder();
         NavigationManager.NavigateTo($"myorders/{newOrderId}");
     } 
 
+    //Because we've now created an event handler, we should dispose of it when the checkout component no longer needs it.
+    public void Dispose()
+    {
+        editContext.OnFieldChanged -= HandleFieldChanged;
+    }
 }
